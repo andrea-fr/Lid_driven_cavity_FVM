@@ -35,10 +35,10 @@ omega_u_start = 0.5
 omega_u_end   = 0.7
 omega_p_start = 0.3
 omega_p_end   = 0.5
-ramp_iters    = 100        # iterazioni di rampa per omega
+ramp_iters    = 100        
 
 max_iter = 1800+1
-tol      = 1e-6            # soglia residuo normalizzato (continuità)
+tol      = 1e-6            
 
 n_cells = len(cells)
 
@@ -65,14 +65,10 @@ grad_u_rec = np.zeros((n_cells, 2))
 grad_v_rec = np.zeros((n_cells, 2))
 
 
-# ==========================================================
-# FUNZIONI
-# ==========================================================
 
-# precalcolo geometria LSQ
-lsq_Minv = np.zeros((n_cells, 2, 2))   # (M^T M)^{-1} per ogni cella
-lsq_MT   = []                           # M^T per ogni cella (lista di array 2×nfacce)
-lsq_weights = []   # lista di array 1D, uno per cella
+lsq_Minv = np.zeros((n_cells, 2, 2))   
+lsq_MT   = []                       
+lsq_weights = []   
 for cell in cells:
     P      = cell["id"]
     xP, yP = cell["centroid"]
@@ -89,10 +85,10 @@ for cell in cells:
         w  = 1.0 / np.sqrt(dx*dx + dy*dy)
         M_rows.append([w*dx, w*dy])
         weights.append(w)
-    M    = np.array(M_rows)             # shape (nfacce, 2)
+    M    = np.array(M_rows)             
     MtM  = M.T @ M + 1e-14*np.eye(2)
     lsq_Minv[P] = np.linalg.inv(MtM)
-    lsq_MT.append(M.T)                  # shape (2, nfacce)
+    lsq_MT.append(M.T)             
     lsq_weights.append(np.array(weights))
 
 
@@ -110,16 +106,12 @@ def gradient_field(variable, var_moving_wall, var_fixed_wall):
                     rhs.append(var_fixed_wall[P]  - variable[P])
             else:
                 rhs.append(variable[N] - variable[P])
-        # w è già assorbita in lsq_MT[P]
         rhs = np.array(rhs) * lsq_weights[P]
         grad_out[P] = lsq_Minv[P] @ (lsq_MT[P] @ rhs)
     return grad_out
 
 
 def gradient_rec(variable, var_fixed_wall, var_moving_wall, grad_variable):
-    """
-    Limitatore di Venkatakrishnan sul gradiente.
-    """
     grad_rec_out = np.zeros((n_cells, 2))
     for cell in cells:
         P = cell["id"]
@@ -165,7 +157,7 @@ def gradient_rec(variable, var_fixed_wall, var_moving_wall, grad_variable):
 
 
 # ==========================================================
-# SETUP PLOT IN TEMPO REALE
+# LIVE PLOT
 # ==========================================================
 
 plt.ion()
@@ -178,7 +170,7 @@ fig, (ax_vel, ax_res) = plt.subplots(
 fig.suptitle(f"SIMPLE solver, Re={Re}", fontsize=12, fontweight="bold")
 
 
-# ---------- pannello sinistro: campo di velocità (patch) ----------
+# image sx
 ax_vel.set_aspect("equal")
 ax_vel.set_xlim(-0.01, 1.01)
 ax_vel.set_ylim(-0.01, 1.01)
@@ -188,7 +180,7 @@ ax_vel.set_title("Iter 0 — Velocity magnitude", fontsize=11)
 cmap_vel   = cm.RdYlBu_r
 norm_vel   = mcolors.Normalize(vmin=0.0, vmax=1.0)
 
-# costruisci una patch per ogni cella (lista fissa, aggiornabile via set_facecolor)
+
 patch_list = []
 for cell in cells:
     coords = np.array([points[n] for n in cell["nodes"]])
@@ -211,7 +203,7 @@ ax_vel.add_collection(pc_vel)
 cbar_vel = fig.colorbar(pc_vel, ax=ax_vel, fraction=0.046, pad=0.04)
 cbar_vel.set_label("Velocity magnitude", fontsize=9)
 
-# ---------- pannello destro: residui ----------
+# image dx
 ax_res.set_yscale("log")
 ax_res.set_xlabel("Iteration", fontsize=10)
 ax_res.set_ylabel("Normalized residuals", fontsize=10)
@@ -227,7 +219,7 @@ plt.tight_layout()
 fig.subplots_adjust(wspace=0.35)
 plt.show()
 
-# storici residui
+#history
 hist_u    = []
 hist_v    = []
 hist_mass = []
@@ -244,37 +236,19 @@ for it in range(max_iter):
     omega_u      = omega_u_start + (omega_u_end - omega_u_start) * ramp
     omega_p      = omega_p_start + (omega_p_end - omega_p_start) * ramp
 
-    # ======================================================
-    # 1)  GRADIENTI  (Weighted Least Squares)
-    # ======================================================
-
-    grad_u = gradient_field(u, np.ones(n_cells)*U_lid, np.zeros(n_cells))
-    grad_v = gradient_field(v, np.zeros(n_cells),      np.zeros(n_cells))
-    grad_p = gradient_field(p, p,                      p)               # dN/dp=0 alle pareti
-
-    # ======================================================
-    # 2)  LIMITATORE DI VENKATAKRISHNAN
-    # ======================================================
+    grad_u = gradient_field(u,np.ones(n_cells)*U_lid,np.zeros(n_cells))
+    grad_v = gradient_field(v,np.zeros(n_cells),np.zeros(n_cells))
+    grad_p = gradient_field(p,p,p) # dN/dp=0 
 
     grad_u_rec = gradient_rec(u, np.zeros(n_cells), np.ones(n_cells)*U_lid, grad_u)
-    grad_v_rec = gradient_rec(v, np.zeros(n_cells), np.zeros(n_cells),      grad_v)
-    # gradiente di pressione NON limitato → preserva la correzione Rhie-Chow
+    grad_v_rec = gradient_rec(v, np.zeros(n_cells), np.zeros(n_cells),grad_v)
     grad_p_rec = grad_p.copy()
-
-    # ======================================================
-    # 3)  ASSEMBLAGGIO EQUAZIONI DI QUANTITÀ DI MOTO
-    #
-    #     Schema: Upwind 2° ordine (SOU)
-    #       termine implicito:  UDS (1° ordine) → matrice
-    #       deferred correction: grad·dx aggiunto al RHS (esplicito)
-    #     Diffusione: schema centrale (mesh ortogonale)
-    # ======================================================
 
     Au = lil_matrix((n_cells, n_cells))
     Av = lil_matrix((n_cells, n_cells))
     bu = np.zeros(n_cells)
     bv = np.zeros(n_cells)
-
+    
     for cell in cells:
         P = cell["id"]
         for face in cell["faces"]:
@@ -283,40 +257,30 @@ for it in range(max_iter):
             N      = face["neighbor"]
 
             # --------------------------------------------------
-            # FACCE INTERNE
+            # internal faces
             # --------------------------------------------------
             if N is not None:
                 d  = face["distance"]
                 xf = face["center"]
 
-                # Flusso convettivo stimato con media lineare (per upwinding)
                 u_mid = 0.5*(u[P] + u[N])
                 v_mid = 0.5*(v[P] + v[N])
-                F     = rho * (u_mid*nx + v_mid*ny) * Sf   # [kg/s]
+                F     = rho * (u_mid*nx + v_mid*ny) * Sf  
+                D = mu * Sf / d #it works only on orthogonal mesh
 
-                # Coefficiente diffusivo (mesh ortogonale)
-                D = mu * Sf / d
-
-                # Cella upwind (determinata UNA VOLTA dal flusso lineare)
                 up = P if F >= 0.0 else N
 
-                # ---- Implicito: UDS puro ----
-                #   ap_P += max(F,0) + D
-                #   an_N  = min(F,0) - D
                 Au[P, P] += max(F, 0.0) + D
                 Av[P, P] += max(F, 0.0) + D
                 Au[P, N] += min(F, 0.0) - D
                 Av[P, N] += min(F, 0.0) - D
 
-                # ---- Esplicito: deferred correction SOU ----
-                #   contributo = F · (grad_up · dx_up)
-                #   dove dx_up = xf - x_up  (vettore da upwind a faccia)
                 dx_up = xf - cells[up]["centroid"]
                 bu[P] -= F * np.dot(grad_u_rec[up], dx_up)
                 bv[P] -= F * np.dot(grad_v_rec[up], dx_up)
 
             # --------------------------------------------------
-            # FACCE AL CONTORNO  (solo diffusione, no convezione)
+            # boundaries
             # --------------------------------------------------
             else:
                 bc = face["boundary"]
@@ -335,36 +299,23 @@ for it in range(max_iter):
                 bv[P]    += D * v_wall
                 
             # ----------------------------------
-            # Pressione
+            # pressure gradient on rhs
             # ----------------------------------
             
             if N is not None:
-                # Interpolazione lineare della pressione alla faccia
                 pf = 0.5 * p[P] + 0.5 * p[N]
             else:
-                # Alle pareti: pressione della cella (gradiente normale nullo)
                 pf = p[P]
 
             bu[P] -= pf * Sf * nx
             bv[P] -= pf * Sf * ny
 
-    # ======================================================
-    # 4)  TERMINE GRADIENTE DI PRESSIONE  (→ RHS)
-    #     Interpolazione lineare della pressione alla faccia
-    # ======================================================
 
-    ap_u = Au.diagonal().copy()   # salva PRIMA di modificare la diagonale
+    ap_u = Au.diagonal().copy()   
     ap_v = Av.diagonal().copy()
 
-
     # ======================================================
-    # 5)  RESIDUO DI MOMENTUM  (calcolato prima di modificare la matrice)
-    # ======================================================
-
-    
-
-    # ======================================================
-    # 6)  UNDER-RELAXATION + SOLUZIONE  u*, v*
+    # 6)  INTERMEDIATE FIELD
     # ======================================================
 
     Au.setdiag(ap_u / omega_u)
@@ -377,15 +328,7 @@ for it in range(max_iter):
     v_star = spsolve(Av.tocsr(), bv)
 
     # ======================================================
-    # 7)  RHIE-CHOW: flusso di massa corretto alle facce interne
-    #
-    #  Formula scalare (proiettata su n̂):
-    #
-    #   F*_f = [ ū*_f·n̂  −  d̄_f·( (pN−pP)/d  −  (∇p·n̂)_f_interp ) ] · Sf
-    #
-    #   d̄_f = 0.5·(VP/ap_P + VN/ap_N)   [m²·s/kg]
-    #   (pN−pP)/d              = derivata direzionale compatta (ortogonale)
-    #   (∇p·n̂)_f_interp       = media delle proiezioni nodali su n̂
+    # 7)  RHIE-CHOW
     # ======================================================
 
     Ap_prime = lil_matrix((n_cells, n_cells))
@@ -405,64 +348,50 @@ for it in range(max_iter):
             d = face["distance"]
             area_N = cells[N]["area"]
 
-            # --- Velocità normale interpolata ---
             u_f_bar = 0.5 * u_star[P] + 0.5 * u_star[N]
             v_f_bar = 0.5 * v_star[P] + 0.5 * v_star[N]
-            flux_vel_bar = u_f_bar * nx + v_f_bar * ny  # [m/s]
+            flux_vel_bar = u_f_bar * nx + v_f_bar * ny  
 
-            # --- Coefficiente d̄_f (Rhie-Chow) ---
-            dP = area_P / ap_u[P]   # usa ap originale (senza omega)
+
+            dP = area_P / ap_u[P]
             dN = area_N / ap_u[N]
-            df_bar = 0.5 * (dP + dN)   # [m²·s/kg]
+            df_bar = 0.5 * (dP + dN) 
 
-            # --- Gradiente di pressione compatto (diretto, lungo n̂) ---
-            grad_p_direct = (p[N] - p[P]) / d   # [Pa/m]
+            
+            grad_p_direct = (p[N] - p[P]) / d 
 
-            # --- Gradiente di pressione interpolato proiettato su n̂ ---
             grad_p_P_normal = grad_p[P, 0] * nx + grad_p[P, 1] * ny
             grad_p_N_normal = grad_p[N, 0] * nx + grad_p[N, 1] * ny
             grad_p_interp_normal = 0.5 * (grad_p_P_normal + grad_p_N_normal)
 
-            # --- Flusso Rhie-Chow ---
-            # F*_f = [ū_f·n̂ - d̄_f·(∇p_direct - ∇p_interp)] · Sf
             flux_rc = (flux_vel_bar - df_bar * (grad_p_direct - grad_p_interp_normal)) * Sf
-            F_star = rho * flux_rc   # [kg/s]
+            F_star = rho * flux_rc  
 
-            # --- Coefficiente per equazione p' ---
-            # Qp = rho · df_bar · Sf / d   (Laplaciano di p')
             Qp = rho * df_bar * Sf / d
 
-            #var_p_prime.append((P, N, Qp, F_star))
             Ap_prime[P, P] += Qp
             Ap_prime[P, N] -= Qp
             bp_prime[P] -= F_star
 
     # ======================================================
-    # 8)  EQUAZIONE PRESSIONE CORRETTIVA
-    #     ∑_f Qp·(p'_N − p'_P) = − ∑_f F*_f
+    # 8)  POISSON EQUATION
     # ======================================================
 
 
-    # Pin pressione di riferimento in cella 0 → sistema non singolare
+    # WE NEED A DIRICHLET BC otherwise Ap_prime is singular 
     Ap_prime[0, :] = 0.0
     Ap_prime[0, 0] = 1.0
     bp_prime[0]    = 0.0
 
-    # ======================================================
-    # 9)  SOLUZIONE p'
-    # ======================================================
 
     p_prime  = spsolve(Ap_prime.tocsr(), bp_prime)
-    p_prime -= np.mean(p_prime)    # rimuovi deriva numerica (modo nullo)
+    # p_prime -= np.mean(p_prime)  #IT COULD BE NECESSARY
 
-    # ======================================================
-    # 10) GRADIENTE DI p'
-    # ======================================================
 
     grad_p_prime = gradient_field(p_prime, p_prime, p_prime)
 
     # ======================================================
-    # 11) AGGIORNAMENTO PRESSIONE E VELOCITÀ
+    # 9) PRESSURE - VELOCITY COUPLING
     # ======================================================
 
     p += omega_p * p_prime
@@ -474,7 +403,7 @@ for it in range(max_iter):
         v[P] = v_star[P] - grad_p_prime[P, 1] * V / ap_v[P]
 
     # ======================================================
-    # 12) RESIDUI  (continuità post-correzione)
+    # 10) RESIDUALS
     # ======================================================
 
     #r_mass_raw = compute_mass_residual(u, v)
@@ -485,7 +414,6 @@ for it in range(max_iter):
     r_v_raw    = np.sum(np.abs(bv - Av_csr.dot(v)))
     r_mass_raw = np.linalg.norm(bp_prime)
 
-    # Normalizzazione alla prima iterazione
     if it == 0:
         res_u_ref    = r_u_raw    if r_u_raw    > 0.0 else 1.0
         res_v_ref    = r_v_raw    if r_v_raw    > 0.0 else 1.0
@@ -499,17 +427,14 @@ for it in range(max_iter):
     hist_v.append(r_v_norm)
     hist_mass.append(r_mass_norm)
 
-    # Stampa a console
     if it % 10 == 0:
         print(f"Iter {it:4d} | continuity: {r_mass_norm:.3e} | x-mom: {r_u_norm:.3e} | "f"y-mom: {r_v_norm:.3e} ")
 
     # ======================================================
-    # 13) PLOT IN TEMPO REALE  (ogni 10 iterazioni)
+    # 11) LIVE PLOT 
     # ======================================================
 
     if it % 10 == 0:
-        # Mappa velocità
-        # --- campo di velocità: aggiorna colori delle patch ---
         vel_mag = np.sqrt(u**2 + v**2)
         vmax    = float(np.max(vel_mag)) if np.max(vel_mag) > 0 else 1.0
         pc_vel.set_array(vel_mag)
@@ -517,7 +442,6 @@ for it in range(max_iter):
         norm_vel.vmax = vmax
         ax_vel.set_title(f"Iter {it} — Velocity magnitude", fontsize=11)
 
-        # --- residui ---
         iters = np.arange(len(hist_u))
         line_u.set_data(iters,    hist_u)
         line_v.set_data(iters,    hist_v)
@@ -528,7 +452,7 @@ for it in range(max_iter):
         fig.canvas.draw_idle()
         plt.pause(0.01)
     # ======================================================
-    # 14) CRITERIO DI CONVERGENZA
+    # 12) STOPPING CRITERIA
     # ======================================================
 
     if r_mass_norm < tol:
@@ -540,17 +464,16 @@ else:
 
 plt.ioff()
 
-# Salva plot residui
+
 res_file = os.path.join(plots_dir, f"Re{Re}.png")
 fig.savefig(res_file, dpi=450)
-#print(f"Plot residui salvato in: {os.path.join(plots_dir, f'residuals_Re{Re}.png')}")
 
 
 # ==========================================================
 # POST-PROCESSING: confronto con Ghia et al. (1982)
 # ==========================================================
 
-# --- v(x) lungo y = 0.5 ---
+# --- v(x) on y = 0.5 ---
 tol_geom = 1e-3
 x_line, v_line = [], []
 for cell in cells:
@@ -561,7 +484,7 @@ for cell in cells:
 x_line = np.array(x_line);  v_line = np.array(v_line)
 idx    = np.argsort(x_line); x_line = x_line[idx]; v_line = v_line[idx]
 
-# --- u(y) lungo x = 0.5 ---
+# --- u(y) on x = 0.5 ---
 y_vert, u_vert = [], []
 for cell in cells:
     x, y = cell["centroid"]
@@ -571,7 +494,6 @@ for cell in cells:
 y_vert = np.array(y_vert);  u_vert = np.array(u_vert)
 idx2   = np.argsort(y_vert); y_vert = y_vert[idx2]; u_vert = u_vert[idx2]
 
-# Dati Ghia et al. 1982
 x_ghia = np.array([
     1.0000, 0.9688, 0.9609, 0.9531, 0.9453, 0.9063, 0.8594,
     0.8047, 0.5000, 0.2344, 0.2266, 0.1563, 0.0938, 0.0781,
