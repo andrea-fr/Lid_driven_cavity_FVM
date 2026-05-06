@@ -1,6 +1,6 @@
 # FVM-LidDrivenCavity
 
-2D incompressible Navier-Stokes solver using the SIMPLE algorithm on structured quadrilateral meshes. Finite Volume Method with Rhie-Chow interpolation and Second Order Upwind convection scheme.
+2D steady incompressible Navier-Stokes solver using the SIMPLE algorithm on structured collocated quadrilateral meshes. Finite Volume Method with Rhie-Chow interpolation and Second Order Upwind convection scheme.
 
 ---
 
@@ -10,8 +10,8 @@ This project implements a finite volume solver for the **lid-driven cavity** ben
 
 The project consists of two independent modules:
 
-- **`mesher_V4_0.py`** — generates a structured quadrilateral mesh on the unit square, computes cell connectivity, face normals, centroids and areas, and exports the mesh to `mesh_data.npz` and `mesh_data.xlsx`.
-- **`solver_V5_2.py`** — reads the mesh and solves the incompressible Navier-Stokes equations using the SIMPLE pressure-velocity coupling algorithm.
+- **`mesher.py`** — generates a structured quadrilateral mesh on the unit square, computes cell connectivity, face normals, centroids and areas, and exports the mesh to `mesh_data.npz` and `mesh_data.xlsx`.
+- **`lid_driven_cavity.py`** — reads the mesh and solves the incompressible Navier-Stokes equations using the SIMPLE pressure-velocity coupling algorithm.
 
 ---
 
@@ -21,27 +21,17 @@ The project consists of two independent modules:
 |---|---|
 | Discretization | Finite Volume Method (FVM) |
 | Pressure-velocity coupling | SIMPLE |
-| Convection scheme | Second Order Upwind (SOU) with deferred correction |
-| Diffusion scheme | Central differencing (exact on orthogonal mesh) |
-| Gradient reconstruction | Weighted Least Squares (cell-based) |
+| Convection scheme | Second Order Upwind (SOU) |
+| Diffusion scheme | Central differencing |
+| Gradient reconstruction | Weighted Least Squares |
 | Gradient limiting | Venkatakrishnan limiter |
 | Face flux interpolation | Rhie-Chow interpolation |
-| Linear solver | Direct sparse (scipy `spsolve`) |
-| Mesh type | Structured quadrilateral |
 
 ---
 
 ## Results
 
 Velocity profiles along the centerlines of the cavity are compared against the reference data of Ghia et al. (1982).
-
-| Re | Status |
-|---|---|
-| 100 | ✅ Converged |
-| 400 | ✅ Converged |
-| 1000 | ✅ Converged |
-| 3200 | ✅ Converged |
-| 5000 | ✅ Converged |
 
 ---
 
@@ -68,18 +58,22 @@ pip install numpy scipy matplotlib pandas xlsxwriter
 **1. Generate the mesh:**
 
 ```bash
-python mesher_V4_0.py
+python mesher.py
 ```
 
-This produces `mesh_data.npz` and `mesh_data.xlsx` in the same directory.
+This produces `mesh_data.npz` and `mesh_data.xlsx` in the same directory. Grid spacing can be set in 
+
+```python
+nx, ny = 100
+```
 
 **2. Run the solver:**
 
 ```bash
-python solver_V5_2.py
+python lid_driven_cavity.py
 ```
 
-The Reynolds number and numerical parameters can be set at the top of `solver_V5_2.py`:
+The Reynolds number and numerical parameters can be set at the top of `lid_driven_cavity.py`:
 
 ```python
 Re            = 1000

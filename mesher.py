@@ -19,7 +19,7 @@ def edge_normal_outward(p1, p2, centroid):
 
 lx=1
 ly=1
-nx=150 #Insert an even number to allow for comparison with the results of Ghia et al.
+nx=100 #Insert an even number to allow for comparison with the results of Ghia et al.
 ny=nx
 x_bottom=np.linspace(0,lx,nx)
 y_bottom=np.zeros(nx)
