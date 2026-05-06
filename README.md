@@ -6,7 +6,7 @@
 
 ## Overview
 
-This project implements a finite volume solver for the **lid-driven cavity** benchmark problem. The cavity is a unit square with three fixed walls and a top wall moving at constant velocity $U = 1$ m/s. The solver is validated against the reference data of Ghia et al. (1982) for Reynolds numbers ranging from 100 to 10000.
+This project implements a finite volume solver for the **lid-driven cavity** benchmark problem. The cavity is a unit square with three fixed walls and a top wall moving at constant velocity. The solver is validated against the reference data of Ghia et al. (1982) for Reynolds numbers ranging from 100 to 10000.
 
 The project consists of two independent modules:
 
