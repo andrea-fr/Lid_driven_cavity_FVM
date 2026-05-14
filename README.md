@@ -92,4 +92,3 @@ Results are saved in the `plots/` subdirectory.
 - U. Ghia, K.N. Ghia, C.T. Shin, *High-Re solutions for incompressible flow using the Navier-Stokes equations and a multigrid method*, Journal of Computational Physics, 48(3):387–411, 1982.
 - J.H. Ferziger, M. Perić, R.L. Street, *Computational Methods for Fluid Dynamics*, 4th ed., Springer, 2020.
 - H. Jasak, *Error Analysis and Estimation for the Finite Volume Method with Applications to Fluid Flows*, PhD Thesis, Imperial College London, 1996.
-- C.M. Rhie, W.L. Chow, *Numerical study of the turbulent flow past an airfoil with trailing edge separation*, AIAA Journal, 21(11):1525–1532, 1983.
